@@ -255,8 +255,8 @@ class Seq2SeqTrainer(Trainer):
         # Priority (handled in generate):
         # gen_kwargs > model.generation_config > default GenerationConfig()
         gen_kwargs = self._gen_kwargs.copy()
-        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
-            gen_kwargs["max_length"] = self.model.config.max_length
+        # if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+        #     gen_kwargs["max_length"] = self.model.config.max_length
         gen_kwargs["num_beams"] = (
             gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.model.config.num_beams
         )
@@ -273,6 +273,9 @@ class Seq2SeqTrainer(Trainer):
             and inputs["labels"].shape == inputs["decoder_input_ids"].shape
         ):
             inputs = {k: v for k, v in inputs.items() if k != "decoder_input_ids"}
+        inputs['input_ids'] = inputs['input_ids'].squeeze(0)
+        inputs['attention_mask'] = inputs['attention_mask'].squeeze(0)
+        gen_kwargs.pop("max_length")
         generated_tokens = self.model.generate(**inputs, **gen_kwargs)
 
         # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop
