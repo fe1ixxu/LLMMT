@@ -1,40 +1,43 @@
-source activate llmmt2
-torchrun --nproc_per_node 8 run_clm.py \
-    --model_name_or_path facebook/opt-125m \
-    --use_peft \
-    --do_train \
-    --do_eval \
-    --do_predict \
-    --language_pairs de-en \
-    --suffix 1000000 \
-    --data_path /home/aiscuser/filtered_wmt22/ \
-    --learning_rate 0.001 \
-    --ignore_prompt_token_for_loss \
-    --per_device_train_batch_size 4 \
-    --per_device_eval_batch_size 4 \
-    --evaluation_strategy steps \
-    --eval_steps 0.05 \
-    --save_strategy steps \
-    --save_steps 0.05 \
-    --save_total_limit 2 \
-    --logging_strategy steps \
-    --logging_steps 0.05 \
-    --output_dir ./tmp/test-adapter \
-    --num_train_epochs 1 \
-    --predict_with_generate \
-    --prediction_loss_only \
-    --max_new_tokens 128 \
-    --max_source_length 128 \
-    --seed 42 \
-    --fp16 \
-    --fp16_full_eval \
-    --fp16_backend auto \
-    --torch_dtype float16 \
-    --overwrite_cache \
-    --overwrite_output_dir
+#!/bin/bash
+# source ~/.bashrc
+# conda activate llmmt2
+
+# accelerate launch run_clm.py \
+#     --model_name_or_path decapoda-research/llama-7b-hf \
+#     --use_peft \
+#     --do_train \
+#     --do_eval \
+#     --do_predict \
+#     --language_pairs de-en \
+#     --suffix 100000 \
+#     --data_path /home/aiscuser/filtered_wmt22/ \
+#     --learning_rate 0.001 \
+#     --ignore_prompt_token_for_loss \
+#     --per_device_train_batch_size 4 \
+#     --per_device_eval_batch_size 4 \
+#     --evaluation_strategy steps \
+#     --eval_steps 0.1 \
+#     --save_strategy steps \
+#     --save_steps 0.1 \
+#     --save_total_limit 2 \
+#     --logging_strategy steps \
+#     --logging_steps 0.05 \
+#     --output_dir ./tmp/test-adapter2 \
+#     --num_train_epochs 5 \
+#     --predict_with_generate \
+#     --prediction_loss_only \
+#     --max_new_tokens 128 \
+#     --max_source_length 128 \
+#     --seed 42 \
+#     --fp16 \
+#     --fp16_full_eval \
+#     --fp16_backend auto \
+#     --torch_dtype float16 \
+#     --overwrite_cache \
+#     --overwrite_output_dir
     # --max_eval_samples 100 \
     # --max_test_samples 100 \
-exit
+# exit
     #     --fp16 \
     # --fp16_full_eval \
     # --fp16_backend auto \
@@ -42,22 +45,23 @@ exit
 # absolute_lr = base_lr * total_batch_size / 256",
 # decapoda-research/llama-7b-hf
 # torchrun --nproc_per_node 8 
-accelerate launch run_clm.py \
+# exit
+accelerate launch run_clm2.py \
     --model_name_or_path decapoda-research/llama-7b-hf \
     --do_predict \
     --language_pairs de-en \
     --data_path /home/aiscuser/filtered_wmt22/ \
     --ignore_prompt_token_for_loss \
-    --per_device_eval_batch_size 3 \
-    --output_dir ./tmp/test-llama2 \
+    --per_device_eval_batch_size 4 \
+    --remove_unused_columns false \
+    --output_dir ./tmp/test2/ \
     --predict_with_generate \
-    --max_new_tokens 64 \
-    --max_source_length 64 \
+    --max_new_tokens 128 \
+    --max_source_length 128 \
     --seed 42 \
-    --max_test_samples 100 \
-    --overwrite_output_dir
+    --overwrite_output_dir 
 
-
+exit
 src=de
 tgt=en
 src_path=/home/aiscuser/gpt-MT/evaluation/testset/wmt-testset/${src}${tgt}/test.${src}-${tgt}.${src}

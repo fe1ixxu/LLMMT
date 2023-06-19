@@ -60,6 +60,7 @@ from transformers.utils.versions import require_version
 from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training, TaskType
 from peft import PeftModel, PeftConfig
 from collections import defaultdict
+from tqdm import tqdm
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -539,7 +540,7 @@ def main():
         src_fullname = LANG_TABLE[source_lang]
         tgt_fullname = LANG_TABLE[target_lang]
         prefix = f"Translate this from {src_fullname} to {tgt_fullname}:\n{src_fullname}: "
-        suffix = f"\n{tgt_fullname}: "
+        suffix = f"\n{tgt_fullname}:"
         prompt = prefix + ex[source_lang] + suffix
         return prompt
     
@@ -587,19 +588,21 @@ def main():
     def tokenize_function_test(examples):
         prompts = []
         targets = []
-        for ex in examples["translation"]:
-            source_lang, target_lang = list(ex.keys())
-            if f"{source_lang}-{target_lang}" in pairs:
-                prompt = get_prompt(source_lang, target_lang, ex)
-                prompts.append(prompt)
-                targets.append(prompt + ex[target_lang])
-            if f"{target_lang}-{source_lang}" in pairs:
-                prompt = get_prompt(target_lang, source_lang, ex)
-                prompts.append(prompt)
-                targets.append(prompt + ex[source_lang])
-        model_inputs = tokenizer(prompts, max_length=data_args.max_source_length, padding=padding, truncation=True, add_special_tokens=True)
-        # check_remove_eos(model_inputs)
-        labels = tokenizer(targets, max_length=model.config.max_length - 1, padding=padding, truncation=True, add_special_tokens=True)
+        ex = examples["translation"]
+        source_lang, target_lang = list(ex.keys())
+        if f"{source_lang}-{target_lang}" in pairs:
+            prompt = get_prompt(source_lang, target_lang, ex)
+            prompts.append(prompt)
+            targets.append(prompt + ex[target_lang])
+        if f"{target_lang}-{source_lang}" in pairs:
+            prompt = get_prompt(target_lang, source_lang, ex)
+            prompts.append(prompt)
+            targets.append(prompt + ex[source_lang])
+        model_inputs = tokenizer(prompts, max_length=data_args.max_source_length, padding=True, return_tensors="pt", truncation=True, add_special_tokens=True)
+        min_max_new_tokens = int(min(len(model_inputs.input_ids[0]) * 1.2, data_args.max_new_tokens))
+        model_inputs["max_new_tokens"] = min_max_new_tokens
+        # # check_remove_eos(model_inputs)
+        labels = tokenizer(targets, max_length=model.config.max_length - 1, padding=True, truncation=True, add_special_tokens=True)
         check_add_eos(labels)
         # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
         # padding in the loss.
@@ -653,18 +656,26 @@ def main():
         if "test" not in raw_datasets:
             raise ValueError("--do_predict requires a test dataset")
         test_dataset = raw_datasets["test"]
+        # ids_to_keep = [139,255, 378, 384, 445]
+        # test_dataset = test_dataset.select(
+        #     (
+        #         i for i in range(len(test_dataset)) 
+        #         if i in set(ids_to_keep)
+        #     )
+        # )
         if data_args.max_test_samples is not None:
             max_test_samples = min(len(test_dataset), data_args.max_test_samples)
             test_dataset = test_dataset.select(range(max_test_samples))
         with training_args.main_process_first(desc="test dataset map pre-processing"):
             test_dataset = test_dataset.map(
                 tokenize_function_test,
-                batched=True,
+                batched=False,
                 num_proc=data_args.preprocessing_num_workers,
                 remove_columns=column_names,
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc="Running tokenizer test dataset",
             )
+        
     metric = evaluate.load("sacrebleu")
 
     ## MTSEQ2SEQ
@@ -707,16 +718,17 @@ def main():
 
         # Some simple post-processing
         decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-        for idx in range(10):
-            print("------------------------")
-            print(decoded_preds[idx])
-            print(decoded_labels[idx])
+        # for idx in range(10):
+        #     print("------------------------")
+        #     print(decoded_preds[idx])
+        #     print(decoded_labels[idx])
             
-        with open(os.path.join(training_args.output_dir, "de-en-100.3.txt"), "w", encoding="utf-8") as f:
+        with open(os.path.join(training_args.output_dir, "de-en-128-tmp3.txt"), "w", encoding="utf-8") as f:
             suffix = f"\nEnglish: "
             for pred in decoded_preds:
                 pred = clean_outputstring(pred, suffix)
                 f.writelines([pred, "\n"])
+        # torch.save(decoded_preds, os.path.join(training_args.output_dir, "de-en-256_list"))
         result = metric.compute(predictions=decoded_preds, references=decoded_labels)
         result = {"bleu": result["score"]}
 
@@ -766,10 +778,18 @@ def main():
         trainer.args.prediction_loss_only = False
         metrics = trainer.predict(
             test_dataset=test_dataset, 
-            max_new_tokens=data_args.max_new_tokens, 
             num_beams=5, 
-            metric_key_prefix="test"
+            metric_key_prefix="test",
+            do_sample=True, 
+            top_k=50,
+            length_penalty=1,
+            repetition_penalty=1.2,
         )
+        # min_max_new_tokens = 0
+        # for bz_idx in range(bz):
+        #     min_max_new_tokens = max(len(sub_test_dataset[bz_idx]['input_ids']), min_max_new_tokens)
+        # min_max_new_tokens = min(min_max_new_tokens * 1.2, data_args.max_new_tokens)
+        # logger.info(f"The max new tokens for bucket id {idx} is {min_max_new_tokens}")
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)
